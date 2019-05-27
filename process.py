@@ -57,7 +57,7 @@ new_data =  pd.concat([new_method_data], axis = 1) #new_api_data,app_perm_data,n
 def normal_fun(new_data, label):
     
     # scoring = accuracy/f1/recall/precision
-    score = ['precision', 'recall', 'f1','accuracy']
+    score = ['precision_weighted', 'recall_weighted', 'f1_weighted','accuracy']
     # 这里只是为了打乱数据顺序
     # 用整个数据做交叉验证
     new_data, x_test, label, y_test = train_test_split(new_data, label, test_size=0.0,shuffle=True)
@@ -66,17 +66,17 @@ def normal_fun(new_data, label):
     lr = LogisticRegression(C = 1, penalty='l1', solver="liblinear")
     scores = cross_validate(lr, new_data, label.values.ravel(), cv=5, scoring=score, return_train_score=False)
     print("LogisticRegression the mean of accuracy" + ":", scores['test_accuracy'].mean())
-    print("LogisticRegression the mean of precision" + ":", scores['test_precision'].mean())
-    print("LogisticRegression the mean of recall" + ":", scores['test_recall'].mean())
-    print("LogisticRegression the mean of F1" + ":", scores['test_f1'].mean())
+    print("LogisticRegression the mean of precision" + ":", scores['test_precision_weighted'].mean())
+    print("LogisticRegression the mean of recall" + ":", scores['test_recall_weighted'].mean())
+    print("LogisticRegression the mean of F1" + ":", scores['test_f1_weighted'].mean())
     print("-----------------------------")
     #
     rfc = RandomForestClassifier(random_state=1, n_estimators=200, min_samples_split=5,min_samples_leaf=3)
     scores = cross_validate(rfc, new_data, label.values.ravel(), cv=5, scoring=score)
     print("RandomForestClassifier the mean of accuracy" + ":", scores['test_accuracy'].mean())
-    print("RandomForestClassifier the mean of precision" + ":", scores['test_precision'].mean())
-    print("RandomForestClassifier the mean of recall" + ":", scores['test_recall'].mean())
-    print("RandomForestClassifier the mean of F1" + ":", scores['test_f1'].mean())
+    print("RandomForestClassifier the mean of precision" + ":", scores['test_precision_weighted'].mean())
+    print("RandomForestClassifier the mean of recall" + ":", scores['test_recall_weighted'].mean())
+    print("RandomForestClassifier the mean of F1" + ":", scores['test_f1_weighted'].mean())
     print("-----------------------------")
     
 #    clf = svm.SVC(C=1, kernel='rbf', gamma='auto')
@@ -89,22 +89,22 @@ def normal_fun(new_data, label):
 
 def xgboost_fun(new_data, label):
     X_train, X_test, Y_train, Y_test = train_test_split(new_data, label, test_size=0.3,shuffle=True)
-    
-    print(Y_train['class'].value_counts())
-    print(Y_test['class'].value_counts())
-    lr = LogisticRegression(C = 1, penalty='l1', solver="liblinear")
-    lr.fit(X_train, Y_train.values.ravel())
-    Y_pre = lr.predict(X_test)
-    cnf_matrix = confusion_matrix(Y_test, Y_pre)
-    recall = cnf_matrix[1,1] / (cnf_matrix[1,0] + cnf_matrix[1,1]) 
-    accuracy = (cnf_matrix[1,1] + cnf_matrix[0,0])/(cnf_matrix[1,1] + cnf_matrix[1,0]+ cnf_matrix[0,0] + cnf_matrix[0,1])
-    precision = cnf_matrix[1,1] / (cnf_matrix[0,1] + cnf_matrix[1,1])
-    F1 = 2 * precision * recall / (precision + recall) 
-    print(cnf_matrix)
-    print("LogisticRegression test accuracy :", accuracy)
-    print("LogisticRegression test precision :", precision)
-    print("LogisticRegression test recall :", recall)
-    print("LogisticRegression test F1 :", F1)
+#    
+#    print(Y_train['class'].value_counts())
+#    print(Y_test['class'].value_counts())
+#    lr = LogisticRegression(C = 1, penalty='l1', solver="liblinear")
+#    lr.fit(X_train, Y_train.values.ravel())
+#    Y_pre = lr.predict(X_test)
+#    cnf_matrix = confusion_matrix(Y_test, Y_pre)
+#    recall = cnf_matrix[1,1] / (cnf_matrix[1,0] + cnf_matrix[1,1]) 
+#    accuracy = (cnf_matrix[1,1] + cnf_matrix[0,0])/(cnf_matrix[1,1] + cnf_matrix[1,0]+ cnf_matrix[0,0] + cnf_matrix[0,1])
+#    precision = cnf_matrix[1,1] / (cnf_matrix[0,1] + cnf_matrix[1,1])
+#    F1 = 2 * precision * recall / (precision + recall) 
+#    print(cnf_matrix)
+#    print("LogisticRegression test accuracy :", accuracy)
+#    print("LogisticRegression test precision :", precision)
+#    print("LogisticRegression test recall :", recall)
+#    print("LogisticRegression test F1 :", F1)
     
     
     '''
@@ -157,6 +157,11 @@ def xgboost_fun(new_data, label):
     print("xgboost   of precision(binary)" + ":", precision_score(Y_test,y_pre))
     print("xgboost   of recall(binary)" + ":", recall_score(Y_test, y_pre))
     print("xgboost   of F1(binary)" + ":", f1_score(Y_test,y_pre, average='binary'))
+    
+    print("xgboost   of precision(weighted)" + ":", precision_score(Y_test,y_pre,average='weighted'))
+    print("xgboost   of recall(weighted)" + ":", recall_score(Y_test, y_pre, average='weighted'))
+    print("xgboost   of F1(weighted)" + ":", f1_score(Y_test,y_pre, average='weighted'))
+    
     cnf_matrix = confusion_matrix(Y_test, y_pre)
     print(cnf_matrix)
     

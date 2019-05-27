@@ -16,6 +16,8 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier,GradientBoostingClassifier
+from xgboost.sklearn import XGBClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.naive_bayes import GaussianNB,MultinomialNB
 from sklearn.model_selection import cross_validate
 import xgboost as xgb
@@ -49,8 +51,8 @@ mal_method_data = mal_method_data.drop(['class'], axis = 1)
 ben_method_data = app_method_data[app_method_data['class'].isin([0])]
 ben_method_data = ben_method_data.drop(['class'], axis = 1)
 
-mal_data = pd.concat([mal_method_data], axis = 1)#mal_perm_data, mal_api_data, mal_method_data
-ben_data = pd.concat([ben_method_data], axis = 1)#ben_perm_data, ben_api_data, ben_method_data
+mal_data = pd.concat([mal_perm_data], axis = 1)#mal_perm_data, mal_api_data, mal_method_data
+ben_data = pd.concat([ben_perm_data], axis = 1)#ben_perm_data, ben_api_data, ben_method_data
 
 # axis = 1 : 每一行的值求和 
 #count_series = mal_method_data.sum(axis = 1)
@@ -143,35 +145,15 @@ def print_res(Y_test, y_pre, classter):
     print(classter + " recall" + ":", recall_score(Y_test, y_pre))
     print(classter + " F1" + ":", f1_score(Y_test,y_pre))
     print("***********************************")
-    
-
-def xgboosting(X_train, X_test, Y_train, Y_test):
-    xgb_params = {
-        'learning_rate': 0.1,  # 步长
-        'n_estimators': 100,
-        'max_depth': 6,  # 树的最大深度
-        'objective': 'multi:softmax',
-        'num_class': 2,
-        'min_child_weight': 1,  # 决定最小叶子节点样本权重和，如果一个叶子节点的样本权重和小于min_child_weight则拆分过程结束。
-        'gamma': 0.3,  # 指定了节点分裂所需的最小损失函数下降值。这个参数的值越大，算法越保守
-        'silent': 0,  # 输出运行信息
-        'subsample': 0.8,  # 每个决策树所用的子样本占总样本的比例（作用于样本）
-        'colsample_bytree': 0.8,  # 建立树时对特征随机采样的比例（作用于特征）典型值：0.5-1
-        'nthread': 4,
-        'seed': 27
-    }
-    xg_train = xgb.DMatrix(X_train, Y_train)
-    xg_test = xgb.DMatrix(X_test, Y_test)
-    watchlist = [(xg_test, 'test')]
-    model = xgb.train(xgb_params, xg_train, 100, evals=watchlist)
-    y_pre = model.predict(xg_test)
-    print_res(Y_test, y_pre, "xgboosting")
-    
+      
 def select_model(model_name):
     if model_name == "SVM":
         model = svm.SVC(kernel='rbf', C=1, gamma='auto')
-    elif model_name == "GDBC":
-        model = GradientBoostingClassifier()
+    elif model_name == "GBDT":
+        model = GradientBoostingClassifier(n_estimators=100)
+    elif model_name == "XGB":
+        model = XGBClassifier(learning_rate= 0.1,n_estimators=100,objective= 'multi:softmax',num_class=2,
+                min_child_weight=1,max_depth=6,gamma=0.3,subsample=0.8,silent=0,seed=27)
     elif model_name == "RF":
         model = RandomForestClassifier(random_state=1, n_estimators=100, min_samples_split=2,min_samples_leaf=2)
     elif model_name == "KNN":
@@ -182,6 +164,8 @@ def select_model(model_name):
         model = DecisionTreeClassifier()
     elif model_name == 'LR':
         model = LogisticRegression(C = 1, penalty='l1', solver="liblinear") 
+    elif model_name == 'MLP':
+        model = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(5, 2), random_state=1)
     else:
         pass
     return model 
@@ -191,10 +175,6 @@ def train_predict(modelname,X_train, X_test, Y_train, Y_test):
     y_pre = clf.predict(X_test)
     print_res(Y_test, y_pre, modelname)
     
-def base_method(X_train, X_test, Y_train, Y_test):
-    base_model = ['NB','LR','DT']
-    for model in base_model:
-        train_predict(model,X_train, X_test, Y_train, Y_test)
 
 def get_oof(clf,n_folds,X_train,y_train,X_test):
     ntrain = X_train.shape[0]
@@ -218,11 +198,13 @@ def get_oof(clf,n_folds,X_train,y_train,X_test):
 def stacking(X_train, X_test, Y_train, Y_test):
     new_X_train = pd.DataFrame()
     new_X_test = pd.DataFrame()
-    models = ['DT', 'KNN','NB','GDBC', 'LR','SVM','RF','LR']
-    print("不集成的效果：")
-    for model in models:
-        train_predict(model,X_train, X_test, Y_train, Y_test)
-   
+    select_classifier_num = 5
+    #['DT','KNN','NB','GDBC','LR','RF','SVM','MLP','XGB','LR']
+    #['DT','LR','RF','LR']
+    models = ['DT','KNN','NB','GBDT','LR','SVM','RF','MLP','XGB','LR']
+#    print("不集成的效果：")
+#    for model in models:
+#        train_predict(model,X_train, X_test, Y_train, Y_test)
     
     for model_name in models[0 : len(models) - 1]:
         clf = select_model(model_name)
@@ -230,6 +212,21 @@ def stacking(X_train, X_test, Y_train, Y_test):
         new_X_train[model_name] = model1_train
         new_X_test[model_name] = model1_test
     print("集成后的效果:")
+    print("用所有算法：")
+    train_predict(models[-1],new_X_train,new_X_test,Y_train,Y_test)
+    
+    selector = SelectKBest(score_func=chi2, k=select_classifier_num)
+    new_X_train = selector.fit_transform(new_X_train, Y_train)
+    support = selector.get_support()
+    use_classifier = []
+    cloumns = new_X_test.columns
+    for i in range(len(cloumns)):
+        if support[i] == False:
+            new_X_test = new_X_test.drop([cloumns[i]], axis=1)
+        else :
+            use_classifier.append(cloumns[i])
+    print("挑选的算法：")
+    print(use_classifier)
     # 第二次训练
     train_predict(models[-1],new_X_train,new_X_test,Y_train,Y_test)
     
