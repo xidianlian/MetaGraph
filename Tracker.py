@@ -6,6 +6,7 @@ Created on Wed Jun 26 14:42:31 2019
 """
 import numpy as np
 import pandas as pd
+import math
 import matplotlib.pyplot as plt 
 from sklearn import svm
 from sklearn.feature_selection import SelectKBest, f_classif, chi2, mutual_info_classif
@@ -26,22 +27,26 @@ from sklearn.metrics import accuracy_score,recall_score,precision_score,f1_score
 def chi_2(data,num,data_type):
     label = pd.DataFrame(data['class']).values.ravel()
     data = data.drop(['class'], axis = 1)
+    col = data.columns 
     selector = SelectKBest(score_func=chi2, k=num)
     data = selector.fit_transform(data, label)
     data =  pd.DataFrame(data)
+    index = selector.get_support(indices=True)
+    support_index = pd.DataFrame(col[index])
+    support_index.to_csv("output\\support_index.csv", index=False, header=False)
     #修改列名
-    col = []
-    for i in range(len(data.columns)):
-        col.append(data_type+ str(i))
-    data.columns = col
+#    col = []
+#    for i in range(len(data.columns)):
+#        col.append(data_type+ str(i))
+#    data.columns = col
     return data, label
 
 def print_res(Y_test, y_pre, classter):
-    cnf_matrix = confusion_matrix(Y_test, y_pre)
-    print("TP : ", cnf_matrix[1,1])
-    print("FP : ", cnf_matrix[0,1])
-    print("TN : ", cnf_matrix[0,0])
-    print("FN : ", cnf_matrix[1,0])
+#    cnf_matrix = confusion_matrix(Y_test, y_pre)
+#    print("TP : ", cnf_matrix[1,1])
+#    print("FP : ", cnf_matrix[0,1])
+#    print("TN : ", cnf_matrix[0,0])
+#    print("FN : ", cnf_matrix[1,0])
     acc = accuracy_score(Y_test,y_pre)
     pre = precision_score(Y_test,y_pre)
     rec = recall_score(Y_test, y_pre)
@@ -57,18 +62,17 @@ def select_model(model_name):
     if model_name == "SVM":
         model = svm.SVC(kernel='rbf', C=1, gamma='auto')
     elif model_name == "GBDT":
-        model = GradientBoostingClassifier(n_estimators=100)
+        model = GradientBoostingClassifier(n_estimators = 50)
     elif model_name == "XGB":
-        model = XGBClassifier(learning_rate= 0.1,n_estimators=100,objective= 'multi:softmax',num_class=2,
-                min_child_weight=1,max_depth=6,gamma=0.3,subsample=0.8,silent=0,seed=27)
+        model = XGBClassifier(learning_rate= 0.1,n_estimators=100,max_depth=6, objective= 'multi:softmax',num_class=2,seed=27)
     elif model_name == "RF":
-        model = RandomForestClassifier(random_state=1, n_estimators=100, min_samples_split=2,min_samples_leaf=2)
+        model = RandomForestClassifier(random_state=1, n_estimators=20)
     elif model_name == "KNN":
         model = KNeighborsClassifier()
     elif model_name == "NB":
         model = MultinomialNB(alpha=2, class_prior=None, fit_prior=True)
     elif model_name == "DT":
-        model = DecisionTreeClassifier()
+        model = DecisionTreeClassifier(splitter='random')
     elif model_name == 'LR':
         model = LogisticRegression(C = 1, penalty='l1', solver="liblinear") 
     elif model_name == 'MLP':
@@ -82,11 +86,20 @@ def train_predict(modelname,X_train, X_test, Y_train, Y_test):
     clf = clf.fit(X_train, Y_train)
     y_pre = clf.predict(X_test)
     print_res(Y_test, y_pre, modelname)
+
+#对每一个分类器单独训练
+def train_predict1(modelname,X_train, X_test, Y_train, Y_test):
+    clf = select_model(modelname)
+    for col in X_train.columns:
+        clf = clf.fit(pd.DataFrame(X_train[col]), Y_train)
+        y_pre = clf.predict(pd.DataFrame(X_test[col]))
+        print_res(Y_test, y_pre, col)
+    
     
 def get_oof(clf,n_folds,X_train,y_train,X_test):
     ntrain = X_train.shape[0]
     ntest =  X_test.shape[0]
-    kf = KFold(n_splits=n_folds, shuffle=False)
+    kf = KFold(n_splits=n_folds, shuffle=True,random_state=2019)
     oof_train = np.zeros((ntrain,)) # 训练样本数 * 1
     oof_test = np.zeros((ntest,)) # 测试样本数 * 1
     
@@ -102,16 +115,16 @@ def get_oof(clf,n_folds,X_train,y_train,X_test):
     oof_test = oof_test/float(n_folds)
     return oof_train, oof_test
 
-def stacking(X_train, X_test, Y_train, Y_test):
+def stacking(X_train, X_test, Y_train, Y_test,data_type):
     new_X_train = pd.DataFrame()
     new_X_test = pd.DataFrame()
     #['DT','KNN','NB','GBDT','LR','SVM','RF','MLP','XGB']
    
-    models = ['DT','KNN','GBDT','LR','SVM','RF','XGB']
-#    print("不集成的效果：")
+    models = ['DT','KNN','GBDT','LR','RF','XGB']
+#    print("不集成的效果：only use %s"%(data_type))
 #    for model in models:
 #        train_predict(model,X_train, X_test, Y_train, Y_test)
-#    
+    
     for model_name in models[0 : len(models)]:
         clf = select_model(model_name)
         model1_train, model1_test = get_oof(clf, 5, X_train, Y_train, X_test)
@@ -122,29 +135,25 @@ def stacking(X_train, X_test, Y_train, Y_test):
 
 
 def FeatDroid(app_api_data,app_perm_data,app_method_data,label):
-    
     X_api_train, X_api_test, Y_api_train, Y_api_test = train_test_split(app_api_data, label, test_size=0.3 ,random_state=2019,shuffle=True)
     X_perm_train, X_perm_test, Y_perm_train, Y_perm_test  = train_test_split(app_perm_data, label, test_size=0.3 ,random_state=2019,shuffle=True)
     X_method_train, X_method_test, Y_method_train, Y_method_test = train_test_split(app_method_data, label, test_size=0.3 ,random_state=2019,shuffle=True)
     
-    new_X_api_train, new_X_api_test = stacking(X_api_train, X_api_test, Y_api_train, Y_api_test)
-    new_X_perm_train, new_X_perm_test = stacking(X_perm_train, X_perm_test, Y_perm_train, Y_perm_test)
-    new_X_method_train, new_X_method_test = stacking(X_method_train, X_method_test, Y_method_train, Y_method_test)
-#    print("融合训练1：")
-#    new_X_train = (new_X_perm_train + new_X_api_train  + new_X_method_train) / 3
-#    new_X_test = (new_X_perm_test + new_X_api_test  + new_X_method_test) / 3
-#    train_predict('LR',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
-    
-    alpha = np.arange(0.1, 1, 0.1)
+    new_X_api_train, new_X_api_test = stacking(X_api_train, X_api_test, Y_api_train, Y_api_test,"api")
+    new_X_perm_train, new_X_perm_test = stacking(X_perm_train, X_perm_test, Y_perm_train, Y_perm_test,"perm")
+    new_X_method_train, new_X_method_test = stacking(X_method_train, X_method_test, Y_method_train, Y_method_test,"method")
+
+#    alpha = np.arange(0, 1.1, 0.1)
+    alpha = np.arange(0.1, 1.0, 0.1)
     for i in alpha:
         for j in alpha:
             for k in alpha:
-                if i + j + k == 1:
-                    print("i: %.2f, j: %.2f, k:%0.2f "%(i,j,k))
-                    new_X_train = i*new_X_perm_train + j*new_X_api_train  + k*new_X_method_train
-                    new_X_test = i*new_X_perm_test + j*new_X_api_test  + k*new_X_method_test
+                if math.fabs(i + j + k - 1) < 0.0001:
+                    print("i: %.1f, j: %.1f, k:%0.1f "%(i,j,k))
+                    new_X_train = i*new_X_api_train  + j*new_X_perm_train  + k*new_X_method_train
+                    new_X_test = i*new_X_api_test + j*new_X_perm_test  + k*new_X_method_test
                     print("融合训练：")
-                    train_predict('LR',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
+                    train_predict('RF',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
 
 def cross_validation(clf, data, label):
     k = 5
@@ -181,11 +190,13 @@ def single_classfier_experiment(app_api_data,app_perm_data,app_method_data,label
 
 def read_select_data(api_csv_path,perm_csv_path,method_csv_path):
     app_api_data = pd.read_csv(api_csv_path, dtype=np.uint16)
-    app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
-    app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
+    app_perm_data = []
+    app_method_data = []
+#    app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
+#    app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
     app_api_data, label = chi_2(app_api_data, 400,'api')
-    app_perm_data, label = chi_2(app_perm_data, 'all', 'perm')
-    app_method_data, label = chi_2(app_method_data, 800,'method')
+#    app_perm_data, label = chi_2(app_perm_data, 'all', 'perm')
+#    app_method_data, label = chi_2(app_method_data, 1200,'method')
     return app_api_data,app_perm_data,app_method_data, label
   
 def amd_data():
@@ -193,22 +204,25 @@ def amd_data():
     perm_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_perm.csv"
     method_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_method_mal5000.csv"
     app_api_data,app_perm_data,app_method_data, label = read_select_data(api_csv_path,perm_csv_path,method_csv_path)
-    single_classfier_experiment(app_api_data,app_perm_data,app_method_data)
-    #FeatDroid(app_api_data,app_perm_data,app_method_data,label)
+#    single_classfier_experiment(app_api_data,app_perm_data,app_method_data,label)
+#    FeatDroid(app_api_data,app_perm_data,app_method_data,label)
     
 def tracker_data():
     api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\Tracker_Api.csv"
     perm_csv_path = "E:\\Spyder\\android_malware_detection\\input\\Tracker_Perm.csv"
     method_csv_path = "E:\\Spyder\\android_malware_detection\\input\\Tracker_Method.csv"
     app_api_data,app_perm_data,app_method_data, label = read_select_data(api_csv_path,perm_csv_path,method_csv_path)
-    single_classfier_experiment(app_api_data,app_perm_data,app_method_data,label)
-    #FeatDroid(app_api_data,app_perm_data,app_method_data,label)
+#    single_classfier_experiment(app_api_data,app_perm_data,app_method_data,label)
+#    FeatDroid(app_api_data,app_perm_data,app_method_data,label)
 
 if __name__ == '__main__':
+#    print("-----------------------------------")
+#    print("-----------AMD data----------------")
+#    print("-----------------------------------")
 #    amd_data()
-#    print("-----------------------------------")
-#    print("-----------Tracker data------------")
-#    print("-----------------------------------")
+    print("-----------------------------------")
+    print("-----------Tracker data------------")
+    print("-----------------------------------")
     tracker_data()
     
     
