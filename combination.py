@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Mar 11 09:30:20 2019
-
+不融合的实验
 @author: lianWeiC
 """
 import numpy as np
@@ -31,70 +30,85 @@ app_api_data = pd.read_csv(api_csv_path, dtype=np.uint16)
 app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
 app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
 
-label = pd.DataFrame(app_perm_data['class']).values.ravel()
-app_perm_data = app_perm_data.drop(['class'], axis=1)
-app_api_data = app_api_data.drop(['class'],axis=1)
-app_method_data = app_method_data.drop(['class'],axis=1)
+def select_features(data,label,num):
+    selector = SelectKBest(score_func=chi2, k=num)
+    new_api_data = selector.fit_transform(data, label)
+    return pd.DataFrame(new_api_data)
+
+def split_data(data,k_features):
+    label = pd.DataFrame(data['class'])
+    data = data.drop(['class'], axis = 1)
+    data = select_features(data, label.values.ravel(), k_features)
+    data['class'] = label
+    mal_data = data[data['class'].isin([1])]
+    mal_data = mal_data.drop(['class'], axis = 1)
+    ben_data = data[data['class'].isin([0])]
+    ben_data = ben_data.drop(['class'],axis=1)
+    return mal_data,ben_data
+
+def under_sampling(mal_data, ben_data):
+    mal_num = len(mal_data)
+    ben_num = len(ben_data)
+    test_size_ben_radio = 0.3
+    test_size_mal_radio = ben_num * test_size_ben_radio / mal_num 
+     
+    # 得到恶意软件和良性软件各自的训练集和测试集
+    mal_data_train, mal_data_test ,mal_y_train,mal_y_test = train_test_split(mal_data, np.ones(len(mal_data), dtype=np.uint16), test_size=test_size_mal_radio ,random_state=2019,shuffle=True)
+    ben_data_train, ben_data_test ,ben_y_train,ben_y_test = train_test_split(ben_data, np.zeros(len(ben_data), dtype=np.uint16), test_size=test_size_ben_radio ,random_state=2019,shuffle=True)
+    
+    X_test = pd.concat([mal_data_test, ben_data_test], axis = 0)
+    Y_test = np.append(mal_y_test, ben_y_test)
+    
+    # --------------start下采样--------------------
+    mal_select_radio = len(ben_data_train) / len(mal_data_train) 
+    x1, mal_use_data, y1, y2 = train_test_split(mal_data_train, mal_y_train, test_size=mal_select_radio,random_state=2019,shuffle=True)
+    # --------------end下采样--------------------
+    X_train = pd.concat([mal_use_data, ben_data_train], axis = 0)
+    Y_train = np.append(y2, ben_y_train)
+    return X_train,X_test,Y_train,Y_test
+
+'''
+# 按列分开
+mal_perm_shape = mal_perm_data.shape
+mal_api_shape = mal_api_data.shape
+mal_method_shape = mal_method_data.shape
+cut1 = mal_perm_shape[1]
+cut2 = cut1 + mal_api_shape[1]
+cut3 = cut2 + mal_method_shape[1]
+mal_perm_data = mal_data.iloc[:, 0:cut1]
+mal_api_data = mal_data.iloc[:, cut1:cut2]
+mal_method_data = mal_data.iloc[:, cut2:cut3]
+
+label1 = np.ones(len(mal_data), dtype=np.uint16)
+label0 = np.zeros(len(ben_data), dtype=np.uint16)
+label = np.append(label1, label0)
+
+
+app_perm_data = pd.concat([mal_perm_data, ben_perm_data], axis = 0)
+app_api_data = pd.concat([mal_api_data, ben_api_data], axis = 0)
+app_method_data = pd.concat([mal_method_data, ben_method_data], axis = 0)
 
 selector = SelectKBest(score_func=chi2, k=400)
 new_api_data = selector.fit_transform(app_api_data, label)
 selector1 = SelectKBest(score_func=chi2, k=800)
 new_method_data = selector1.fit_transform(app_method_data, label)
-app_api_data = pd.DataFrame(new_api_data)
-app_method_data = pd.DataFrame(new_method_data)
-#修改列名
-col1 = []
-col2 = []
-for i in range(len(app_api_data.columns)):
-    col1.append('API' + str(i))
-for i in range(len(app_method_data.columns)):
-    col2.append('METHOD' + str(i))
-app_api_data.columns = col1
-app_method_data.columns = col2
+selector2 = SelectKBest(score_func=chi2, k=361)
+new_perm_data = selector2.fit_transform(app_perm_data, label)
 
-test_radio = 0.3
-X_perm_train, X_perm_test, Y_perm_train, Y_perm_test = train_test_split(app_perm_data ,label, test_size=test_radio,random_state=2019,shuffle=True)
-X_api_train, X_api_test, Y_api_train, Y_api_test = train_test_split(app_api_data ,label, test_size=test_radio ,random_state=2019,shuffle=True)
-X_method_train, X_method_test, Y_method_train, Y_method_test = train_test_split(app_method_data ,label, test_size=test_radio ,random_state=2019,shuffle=True)
-
-
+new_api_data = pd.DataFrame(new_api_data)
+new_perm_data = pd.DataFrame(new_perm_data)
+new_method_data = pd.DataFrame(new_method_data)
+'''
 def print_res(Y_test, y_pre, classter):
     cnf_matrix = confusion_matrix(Y_test, y_pre)
-    TP = cnf_matrix[1,1]
-    FP = cnf_matrix[0,1]
-    TN = cnf_matrix[0,0]
-    FN = cnf_matrix[1,0]
-    mal_num = TP + FN
-    ben_num = TN + FP
-    
-    mal_recall = TP / (TP + FN)
-    mal_precision = TP / (TP + FP)
-    M_F1 = 2 * mal_recall * mal_precision / (mal_recall + mal_precision)
-    
-    ben_recall = TN / ( TN + FP)
-    ben_precision = TN / ( TN + FN)
-    B_F1 = 2 * ben_recall * ben_precision / (ben_precision + ben_recall)
-    
-    W_F1 = (ben_num * B_F1 + mal_num * M_F1) / (ben_num + mal_num)
-    print("malware:", mal_num)
-    print("benign:", ben_num)
-    print("TP : ", TP)
-    print("FP : ", FP)
-    print("TN : ", TN)
-    print("FN : ", FN)
+    print("TP : ", cnf_matrix[1,1])
+    print("FP : ", cnf_matrix[0,1])
+    print("TN : ", cnf_matrix[0,0])
+    print("FN : ", cnf_matrix[1,0])
     print(classter + " accuracy" + ":", accuracy_score(Y_test,y_pre))
-    # TP/(TP+FP)
-    print(classter + " M-precision" + ":", precision_score(Y_test,y_pre))
-    # TP/(TP+FN)
-    print(classter + " M-recall" + ":", recall_score(Y_test, y_pre))
-    
-    print(classter + " M-F1" + ":", f1_score(Y_test, y_pre))
-    # TN/(TN+FN)
-    print(classter + " B-precision" + ":", ben_precision)
-    # TN/(TN+FP)
-    print(classter + " B-recall" + ":", ben_recall)
-    print(classter + " B-F1" + ":", B_F1)
-    print(classter + "W-F1" + ":", f1_score(Y_test,y_pre,average='weighted'))
+    print(classter + " precision" + ":", precision_score(Y_test,y_pre))
+    print(classter + " recall" + ":", recall_score(Y_test, y_pre))
+    print(classter + " F1" + ":", f1_score(Y_test,y_pre))
     print("***********************************")
       
 def select_model(model_name):
@@ -115,8 +129,8 @@ def select_model(model_name):
         model = DecisionTreeClassifier()
     elif model_name == 'LR':
         model = LogisticRegression(C = 1, penalty='l1', solver="liblinear") 
-#    elif model_name == 'MLP':
-#        model = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(5, 2), random_state=1)
+    elif model_name == 'MLP':
+        model = MLPClassifier(solver='lbfgs', alpha=1e-5, hidden_layer_sizes=(5, 2), random_state=1)
     else:
         pass
     return model 
@@ -149,26 +163,37 @@ def get_oof(clf,n_folds,X_train,y_train,X_test):
 def stacking(X_train, X_test, Y_train, Y_test):
     new_X_train = pd.DataFrame()
     new_X_test = pd.DataFrame()
-    #['DT','KNN','NB','GDBC','LR','RF','SVM','MLP','XGB','LR']
-    #['DT','LR','RF','LR']
-    models = ['DT','KNN','GBDT','LR','RF']
-    print("不集成的效果：")
-    for model in models:
-        train_predict(model,X_train, X_test, Y_train, Y_test)
+    #['DT','KNN','NB','GBDT','LR','SVM','RF','MLP','XGB']
+    models = ['DT','GBDT','LR','RF','MLP','XGB']
+#    print("不集成的效果：")
+#    for model in models:
+#        train_predict(model,X_train, X_test, Y_train, Y_test)
     
     for model_name in models[0 : len(models) - 1]:
         clf = select_model(model_name)
         model1_train, model1_test = get_oof(clf, 5, X_train, Y_train, X_test)
         new_X_train[model_name] = model1_train
         new_X_test[model_name] = model1_test
-    
-    return new_X_train, new_X_test 
-    
+   
+    return new_X_train,new_X_test
+
 
     
-    
 if __name__ == '__main__':
-    new_X_perm_train, new_X_perm_test = stacking(X_perm_train, X_perm_test, Y_perm_train, Y_perm_test)
-    #    # 第二次训练
-    train_predict("LR",new_X_perm_train,new_X_perm_test,Y_perm_train,Y_perm_test)
+    mal_api_data, ben_api_data = split_data(app_api_data, 400)
+    mal_perm_data, ben_perm_data = split_data(app_perm_data,300)
+    mal_method_data, ben_method_data = split_data(app_method_data,800)
+    # 这里， Y_api_train = Y_perm_train = Y_method_train 
+    X_api_train, X_api_test, Y_api_train, Y_api_test = under_sampling(mal_api_data, ben_api_data)
+    X_perm_train, X_perm_test, Y_perm_train, Y_perm_test = under_sampling(mal_perm_data, ben_perm_data)
+    X_method_train, X_method_test, Y_method_train, Y_method_test = under_sampling(mal_method_data, ben_method_data)    
     
+    X_train = pd.concat([X_api_train, X_perm_train, X_method_train], axis = 1)
+    X_test = pd.concat([X_api_test, X_perm_test, X_method_test], axis = 1)
+    
+    #   stacking 第一次训练    
+    new_X_train, new_X_test = stacking(X_train, X_test, Y_perm_train, Y_perm_test)
+   
+    # 第二次训练
+    print("组合训练：")
+    train_predict('LR',new_X_train,new_X_test,Y_perm_train, Y_perm_test)

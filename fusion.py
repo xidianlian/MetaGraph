@@ -22,14 +22,6 @@ from sklearn.naive_bayes import GaussianNB,MultinomialNB
 from sklearn.model_selection import cross_validate
 import xgboost as xgb
 from sklearn.metrics import accuracy_score,recall_score,precision_score,f1_score,classification_report,confusion_matrix
-api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_api_mal2000.csv"
-#api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_api_ben4000.csv"
-#api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_api_tot4000.csv"
-perm_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_perm.csv"
-method_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_method_mal5000.csv"
-app_api_data = pd.read_csv(api_csv_path, dtype=np.uint16)
-app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
-app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
 
 def select_features(data,label,num):
     selector = SelectKBest(score_func=chi2, k=num)
@@ -111,6 +103,7 @@ def print_res(Y_test, y_pre, classter):
     print(classter + " recall" + ":", recall_score(Y_test, y_pre))
     print(classter + " F1" + ":", f1_score(Y_test,y_pre))
     print("***********************************")
+   
       
 def select_model(model_name):
     if model_name == "SVM":
@@ -165,25 +158,30 @@ def stacking(X_train, X_test, Y_train, Y_test):
     new_X_train = pd.DataFrame()
     new_X_test = pd.DataFrame()
     #['DT','KNN','NB','GBDT','LR','SVM','RF','MLP','XGB']
-    models = ['DT','KNN','NB','GBDT','LR','SVM','RF','MLP','XGB']
-#    print("不集成的效果：")
+    models = ['DT','GBDT','LR','RF','MLP']
+    print("不集成的效果：")
 #    for model in models:
 #        train_predict(model,X_train, X_test, Y_train, Y_test)
     
-    for model_name in models[0 : len(models) - 1]:
+    for model_name in models[0 : len(models)]:
         clf = select_model(model_name)
         model1_train, model1_test = get_oof(clf, 5, X_train, Y_train, X_test)
         new_X_train[model_name] = model1_train
         new_X_test[model_name] = model1_test
    
     return new_X_train,new_X_test
-
-
-    
+  
 if __name__ == '__main__':
+    api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_api_mal2000.csv"
+    perm_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_perm.csv"
+    method_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_method_mal5000.csv"
+    app_api_data = pd.read_csv(api_csv_path, dtype=np.uint16)
+    app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
+    app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
+    
     mal_api_data, ben_api_data = split_data(app_api_data, 400)
     mal_perm_data, ben_perm_data = split_data(app_perm_data,300)
-    mal_method_data, ben_method_data = split_data(app_method_data,800)
+    mal_method_data, ben_method_data = split_data(app_method_data,400)
     X_api_train, X_api_test, Y_api_train, Y_api_test = under_sampling(mal_api_data, ben_api_data)
     X_perm_train, X_perm_test, Y_perm_train, Y_perm_test = under_sampling(mal_perm_data, ben_perm_data)
     X_method_train, X_method_test, Y_method_train, Y_method_test = under_sampling(mal_method_data, ben_method_data)    
@@ -198,9 +196,36 @@ if __name__ == '__main__':
 #    train_predict('XGB',new_X_perm_train,new_X_perm_test,Y_perm_train, Y_perm_test)
 #    train_predict('XGB',new_X_api_train,new_X_api_test,Y_perm_train, Y_perm_test)
 #    train_predict('XGB',new_X_method_train,new_X_method_test,Y_perm_train, Y_perm_test)
-    
-    new_X_train = (new_X_perm_train + new_X_api_train  + new_X_method_train) / 3
-    new_X_test = (new_X_perm_test + new_X_api_test  + new_X_method_test) / 3
-    # 第二次训练
+    # 方法一
+#    new_X_train = (new_X_perm_train + new_X_api_train  + new_X_method_train) / 3
+#    new_X_test = (new_X_perm_test + new_X_api_test  + new_X_method_test) / 3
+    # 方法二
+    new_X_train = pd.concat([new_X_perm_train, new_X_api_train, new_X_method_train], axis = 1)
+    new_X_test = pd.concat([new_X_perm_test, new_X_api_test, new_X_method_test], axis = 1)
+    # 方法三
+#    alpha = np.arange(0.1, 1, 0.1)
+#  
+#    for i in alpha:
+#        for j in alpha:
+#            for k in alpha:
+#                if i + j + k == 1:
+#                    print("i: %.2f, j: %.2f, k:%0.2f "%(i,j,k))
+#                    new_X_train = i*new_X_perm_train + j*new_X_api_train  + k*new_X_method_train
+#                    new_X_test = (new_X_perm_test + new_X_api_test  + new_X_method_test)/3
+#                    print("融合训练：")
+#                    train_predict('LR',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
+                    
+#    # 第二次训练
     print("融合训练：")
-    train_predict('XGB',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
+    train_predict('LR',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
+    
+    print("组合训练：")
+    X_train = pd.concat([X_api_train, X_perm_train, X_method_train], axis = 1)
+    X_test = pd.concat([X_api_test, X_perm_test, X_method_test], axis = 1)
+     #   stacking 第一次训练    
+    new_X_train, new_X_test = stacking(X_train, X_test, Y_perm_train, Y_perm_test)
+   
+    # 第二次训练
+    print("组合训练：")
+    train_predict('LR',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
+    

@@ -32,7 +32,11 @@ def chi_2(data,num,data_type):
     data = selector.fit_transform(data, label)
     data =  pd.DataFrame(data)
     index = selector.get_support(indices=True)
-    support_index = pd.DataFrame(col[index])
+    score = selector.scores_
+    p_value = selector.pvalues_
+    
+    support_data = {"index":col[index], "score":score[index], "p_value":p_value[index]}
+    support_index = pd.DataFrame(support_data)
     support_index.to_csv("output\\support_index.csv", index=False, header=False)
     #修改列名
 #    col = []
@@ -139,6 +143,7 @@ def FeatDroid(app_api_data,app_perm_data,app_method_data,label):
     X_perm_train, X_perm_test, Y_perm_train, Y_perm_test  = train_test_split(app_perm_data, label, test_size=0.3 ,random_state=2019,shuffle=True)
     X_method_train, X_method_test, Y_method_train, Y_method_test = train_test_split(app_method_data, label, test_size=0.3 ,random_state=2019,shuffle=True)
     
+    '''
     new_X_api_train, new_X_api_test = stacking(X_api_train, X_api_test, Y_api_train, Y_api_test,"api")
     new_X_perm_train, new_X_perm_test = stacking(X_perm_train, X_perm_test, Y_perm_train, Y_perm_test,"perm")
     new_X_method_train, new_X_method_test = stacking(X_method_train, X_method_test, Y_method_train, Y_method_test,"method")
@@ -154,7 +159,15 @@ def FeatDroid(app_api_data,app_perm_data,app_method_data,label):
                     new_X_test = i*new_X_api_test + j*new_X_perm_test  + k*new_X_method_test
                     print("融合训练：")
                     train_predict('RF',new_X_train,new_X_test,Y_perm_train, Y_perm_test)
-
+    '''
+    # 其他分类器
+    models = ['DT','KNN','GBDT','LR','RF','XGB']
+   
+    new_X_train = pd.concat([X_api_train  + X_perm_train  + X_method_train],axis=1)
+    new_X_test = pd.concat([X_api_test + X_perm_test  + X_method_test],axis=1)
+    for model_name in models[0 : len(models)]:
+        train_predict(model_name,new_X_train,new_X_test,Y_perm_train, Y_perm_test)
+    
 def cross_validation(clf, data, label):
     k = 5
     acc = 0
@@ -176,7 +189,7 @@ def cross_validation(clf, data, label):
     return acc/k, pre/k, rec/k, f1/k
 
 def run_cross_vald(data, label):
-    models = ['DT','KNN','GBDT','LR','SVM','RF','XGB']
+    models = ['DT','KNN','GBDT','LR','RF','XGB']
     for model_name in models[0 : len(models)]:
         clf = select_model(model_name)
         acc,pre,rec,f1 = cross_validation(clf, data, label)
@@ -192,37 +205,39 @@ def read_select_data(api_csv_path,perm_csv_path,method_csv_path):
     app_api_data = pd.read_csv(api_csv_path, dtype=np.uint16)
     app_perm_data = []
     app_method_data = []
-#    app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
-#    app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
+    app_perm_data = pd.read_csv(perm_csv_path, dtype=np.uint16)
+    app_method_data = pd.read_csv(method_csv_path, dtype=np.uint16)
     app_api_data, label = chi_2(app_api_data, 400,'api')
-#    app_perm_data, label = chi_2(app_perm_data, 'all', 'perm')
-#    app_method_data, label = chi_2(app_method_data, 1200,'method')
+    app_perm_data, label = chi_2(app_perm_data, 'all', 'perm')
+    app_method_data, label = chi_2(app_method_data, 1200,'method')
     return app_api_data,app_perm_data,app_method_data, label
   
 def amd_data():
+    print("-----------------------------------")
+    print("-----------AMD data----------------")
+    print("-----------------------------------")
     api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_api_mal4000.csv"
     perm_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_perm.csv"
     method_csv_path = "E:\\Spyder\\android_malware_detection\\input\\app_method_mal5000.csv"
     app_api_data,app_perm_data,app_method_data, label = read_select_data(api_csv_path,perm_csv_path,method_csv_path)
 #    single_classfier_experiment(app_api_data,app_perm_data,app_method_data,label)
-#    FeatDroid(app_api_data,app_perm_data,app_method_data,label)
+    FeatDroid(app_api_data,app_perm_data,app_method_data,label)
     
 def tracker_data():
+    print("-----------------------------------")
+    print("-----------Tracker data------------")
+    print("-----------------------------------")
     api_csv_path = "E:\\Spyder\\android_malware_detection\\input\\Tracker_Api.csv"
     perm_csv_path = "E:\\Spyder\\android_malware_detection\\input\\Tracker_Perm.csv"
     method_csv_path = "E:\\Spyder\\android_malware_detection\\input\\Tracker_Method.csv"
     app_api_data,app_perm_data,app_method_data, label = read_select_data(api_csv_path,perm_csv_path,method_csv_path)
 #    single_classfier_experiment(app_api_data,app_perm_data,app_method_data,label)
-#    FeatDroid(app_api_data,app_perm_data,app_method_data,label)
+    FeatDroid(app_api_data,app_perm_data,app_method_data,label)
 
 if __name__ == '__main__':
-#    print("-----------------------------------")
-#    print("-----------AMD data----------------")
-#    print("-----------------------------------")
-#    amd_data()
-    print("-----------------------------------")
-    print("-----------Tracker data------------")
-    print("-----------------------------------")
+
+   # amd_data()
+
     tracker_data()
     
     
